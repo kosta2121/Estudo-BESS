@@ -10,6 +10,14 @@ Este projeto cria a base de um simulador em Python/Streamlit para:
 
 ### Como correr localmente
 
+Arranque em um comando no Windows/PowerShell:
+
+```powershell
+.\run.cmd
+```
+
+O script cria `.venv` se ainda nao existir, instala/atualiza as dependencias e arranca a app Streamlit.
+
 1. Crie e ative um ambiente virtual (opcional mas recomendado).
 2. Instale as dependências:
 

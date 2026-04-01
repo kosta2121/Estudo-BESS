@@ -6,6 +6,7 @@ from enum import Enum
 from typing import List, Tuple, Dict
 import json
 from pathlib import Path
+from functools import lru_cache
 
 import holidays
 
@@ -46,6 +47,7 @@ def _intervalo(hora_ini: str, hora_fim: str, periodo: Periodo) -> IntervaloHorar
     return IntervaloHorario(_parse_hora(hora_ini), _parse_hora(hora_fim), periodo)
 
 
+@lru_cache(maxsize=16)
 def _obter_feriados_pt(ano: int) -> holidays.HolidayBase:
     """Feriados nacionais principais em Portugal."""
     return holidays.country_holidays("PT", years=[ano])
@@ -57,7 +59,9 @@ def _eh_verao(d: date) -> bool:
 
 
 def _tipo_dia(d: date, feriados: holidays.HolidayBase) -> str:
-    if d.weekday() >= 5 or d in feriados:
+    if d in feriados:
+        return "domingo"
+    if d.weekday() >= 5:
         # 5 = sábado, 6 = domingo
         if d.weekday() == 5:
             return "sabado"
@@ -230,10 +234,23 @@ _CODE_TO_PERIODO: Dict[str, Periodo] = {
 
 
 def _carregar_mapa_15min() -> Dict[str, Dict]:
-    path = Path(__file__).with_name("mapas_tarifarios_15min.json")
-    if not path.exists():
-        return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        from extract_mapas_xlsx import extract_maps, find_workbook
+
+        workbook_path = find_workbook()
+        return extract_maps(workbook_path)
+    except Exception:
+        pass
+
+    candidate_names = [
+        "mapas_tarifarios_15min_v2.json",
+        "mapas_tarifarios_15min.json",
+    ]
+    for name in candidate_names:
+        path = Path(__file__).with_name(name)
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    return {}
 
 
 _MAPA_15MIN = _carregar_mapa_15min()
@@ -269,6 +286,8 @@ def _obter_code_de_mapa(
 
     if tipo_mapa in bloco and hora_key in bloco[tipo_mapa]:
         return bloco[tipo_mapa][hora_key]
+    if "fim_de_semana" in bloco and tipo_mapa in {"sabado", "domingo_feriado"} and hora_key in bloco["fim_de_semana"]:
+        return bloco["fim_de_semana"][hora_key]
     if "fim-de-semana" in bloco and tipo_mapa in {"sabado", "domingo_feriado"} and hora_key in bloco["fim-de-semana"]:
         return bloco["fim-de-semana"][hora_key]
     if "todos_os_dias" in bloco and hora_key in bloco["todos_os_dias"]:
@@ -303,6 +322,7 @@ def obter_periodo(timestamp: datetime, ciclo: TariffCycle, regime: TariffRegime 
     raise RuntimeError(f"Nenhum período encontrado para {timestamp=}, {ciclo=}")
 
 
+@lru_cache(maxsize=64)
 def gerar_mapa_periodos_ano(
     ano: int,
     ciclo: TariffCycle,
@@ -325,6 +345,7 @@ def gerar_mapa_periodos_ano(
     return mapa
 
 
+@lru_cache(maxsize=64)
 def horas_ponta_por_mes(
     ano: int,
     ciclo: TariffCycle,
@@ -352,4 +373,3 @@ def horas_ponta_por_mes(
         atual += delta
 
     return resultado
-
